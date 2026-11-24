@@ -4,7 +4,7 @@ The TypeScript client for a self-hosted Feedback Pilgrim instance. Feedback Pilg
 
 One package runs on Node.js, Bun, Deno, Cloudflare Workers and other edge runtimes. The package has no runtime dependencies. It uses the global `fetch` and Web Crypto. It sends no telemetry.
 
-> Status: 0.1.0, not released. The package is not on npm yet.
+> Status: 0.1.0, not released. The package is not on npm. Install it from GitHub.
 
 ## Contents
 
@@ -20,14 +20,19 @@ One package runs on Node.js, Bun, Deno, Cloudflare Workers and other edge runtim
 - [Cancel a call](#cancel-a-call)
 - [Framework integration](#framework-integration)
 - [Supported runtimes](#supported-runtimes)
+- [License](#license)
 
 ## Install
 
+The package is not on a registry. Install it from GitHub:
+
 ```sh
-npm install feedbackpilgrim
+npm install github:amedina068/feedbackpilgrim-js
 ```
 
-For Bun, use `bun add feedbackpilgrim`. For Deno, import `npm:feedbackpilgrim`.
+The `prepare` script builds `dist/` during the install. The repository is private, so you need read access and git credentials for GitHub.
+
+For Bun, use `bun add github:amedina068/feedbackpilgrim-js`.
 
 ## Quick start
 
@@ -69,7 +74,7 @@ The SDK sends `Accept: application/json` with each request. Without this header,
 
 | Property               | Methods                                                | Endpoint                       |
 | ---------------------- | ------------------------------------------------------ | ------------------------------ |
-| `pilgrim.init()`       | (method)                                               | `/api/public/v1/init`          |
+| `pilgrim.signInUrl()`  | (method)                                               | `/api/public/v1/init`          |
 | `pilgrim.posts`        | `list()`, `get()`, `create()`, `update()`              | `/api/public/v1/posts`         |
 | `pilgrim.releaseNotes` | `list()`, `get()`, `create()`, `update()`              | `/api/public/v1/release-notes` |
 | `pilgrim.contacts`     | `list()`, `get()`, `upsert()`, `update()`              | `/api/public/v1/contacts`      |
@@ -82,19 +87,19 @@ Each update uses `PATCH` and changes only the fields that you send. A `tags` lis
 
 The API has no delete for posts, release notes, contacts and testimonials. It always returns `405` for them, so the SDK does not offer these calls.
 
-### Init
+### Sign-in link
 
-`init()` creates or updates the contact with this email. It returns a sign-in link for the public site. The link is valid for 24 hours. Send it only to that contact.
+`signInUrl()` creates or updates the contact with this email. It returns a sign-in link for the public site. The link is valid for 24 hours. Send it only to that contact.
 
 ```ts
-const { auth_url } = await pilgrim.init({
+const url = await pilgrim.signInUrl({
 	email: "jane@example.com",
 	name: "Jane Doe",
-	plan: "premium", // a custom field
+	customFields: { plan: "premium" },
 });
 ```
 
-The app sends `[]` when the contact has no email. The SDK returns `{}` for it, so `auth_url` is `undefined`.
+For a contact that exists, `customFields` replace the custom fields of the contact. If the email is empty, the app sends `[]` and no link. Then `signInUrl()` returns `null`.
 
 The widget call `POST /api/v1/init` is not in this SDK. The widget script calls it from the browser with the publishable key. Your server makes only the [identity hash](#identity-hash) for it.
 
@@ -265,12 +270,23 @@ const event = await verifyWebhook({
 	tolerance: 300, // seconds, the default
 });
 
-event.deliveryId; // "0b8f2c4e-6a1d-4e3b-9c7f-1a2b3c4d5e6f"
-event.event; // "post.status_changed"
+event.type; // "post.status_changed"
 event.data; // { id, title, content, status, board_id, contact_id, stage }
+event.payload; // the decoded body: { event, data }
+event.timestamp; // 1763456789
+event.deliveryId; // "0b8f2c4e-6a1d-4e3b-9c7f-1a2b3c4d5e6f", or null
 ```
 
-If a header is missing, the signature does not match, or the timestamp is more than `tolerance` seconds from now, `verifyWebhook()` throws a `WebhookVerificationError`. Its `reason` is `signature`, `timestamp` or `delivery`. Answer with a 400 status, and do not process the body.
+If the delivery is not valid, `verifyWebhook()` throws a `WebhookVerificationError`. Answer with a 400 status, and do not process the body. The SDK does the checks in this order, and `reason` tells which check failed:
+
+| `reason`    | Cause                                                                             |
+| ----------- | --------------------------------------------------------------------------------- |
+| `timestamp` | The timestamp header is missing or has a character that is not a digit.           |
+| `signature` | The signature header is missing or does not match the timestamp and the raw body. |
+| `timestamp` | The timestamp is more than `tolerance` seconds before or after now.               |
+| `payload`   | The signature is valid, but the body is not a JSON object.                        |
+
+If the `X-FeedbackPilgrim-Delivery` header is missing, the verification passes and `deliveryId` is `null`. Older instances do not send this header.
 
 `verifyWebhookSignature()` returns a boolean. Use it when you read the headers yourself:
 
@@ -289,9 +305,9 @@ Obey these rules:
 
 1. Verify the raw bytes of the body. Do not parse the JSON and encode it again. The app escapes `/` as `\/` and each character that is not ASCII as `\uXXXX`, so a new encoding gives other bytes.
 2. Store `deliveryId` after you process a delivery. If a delivery has an ID that you processed, drop it. The SDK does not store IDs.
-3. Keep a `default` branch for `event.event`. A new app version can add event types.
+3. Keep a `default` branch for `event.type`. A new app version can add event types.
 
-The SDK compares the digests in constant time with Web Crypto.
+The SDK makes the signature header lowercase, then compares the digests in constant time with Web Crypto. An uppercase hex signature is valid.
 
 ## Errors
 
@@ -340,20 +356,23 @@ If you abort a call with your own `AbortSignal`, the SDK throws the reason of th
 
 ## Retries
 
-The SDK retries a failed call up to `maxRetries` times. The delay doubles on each attempt: 0.5, 1, 2, 4 and 8 seconds at most. Half of each delay is random (jitter). If the server sends `Retry-After`, the SDK waits that time. If `Retry-After` is more than 60 seconds, the SDK does not retry and throws a `RateLimitError`.
+The SDK retries a failed call up to `maxRetries` times. The default is 2. The delay doubles on each attempt: 0.5, 1, 2, 4 and 8 seconds at most. Half of each delay is random (jitter). If a retried response has `Retry-After` (seconds or an HTTP date), the SDK waits that time. If `Retry-After` is more than 60 seconds, the SDK does not retry and throws the error.
 
-| Failure                       | Retry of an idempotent call | Retry of another call                    |
-| ----------------------------- | --------------------------- | ---------------------------------------- |
-| 429                           | Yes                         | Yes. The server did not run the request. |
-| 5xx                           | Yes                         | No                                       |
-| Timeout                       | Yes                         | No                                       |
-| Connection refused, DNS error | Yes                         | Yes. The server did not get the request. |
-| Other connection error        | Yes                         | No                                       |
-| Other 4xx                     | No                          | No                                       |
+| Failure                                               | Retry of an idempotent call | Retry of another call                    |
+| ----------------------------------------------------- | --------------------------- | ---------------------------------------- |
+| 429                                                   | Yes                         | Yes. The server did not do the request.  |
+| DNS failure, refused connection, connect timeout      | Yes                         | Yes. The server did not get the request. |
+| 5xx                                                   | Yes                         | No                                       |
+| `timeout` of the SDK, reset or other connection error | Yes                         | No                                       |
+| Other 4xx                                             | No                          | No                                       |
+
+`ConnectionError.beforeSend` is `true` for a DNS failure (`ENOTFOUND`, `EAI_AGAIN`), a refused connection (`ECONNREFUSED`) and a connect timeout (`UND_ERR_CONNECT_TIMEOUT`).
 
 These calls are idempotent: each `list()` and `get()`, each `update()`, `testimonials.approve()`, `contacts.upsert()` and `tags.delete()`. An update sets fields to fixed values, so a repeat changes nothing. The app sends the emails of a status change only when the status changes. `contacts.upsert()` uses the email as the key, so a repeat updates the same contact.
 
-These calls are not idempotent: `init()`, `posts.create()`, `releaseNotes.create()`, `testimonials.create()` and `tags.create()`. A repeat can make a second record.
+These calls are not idempotent: `signInUrl()`, `posts.create()`, `releaseNotes.create()`, `testimonials.create()` and `tags.create()`. A repeat can make a second record, and `signInUrl()` makes a new link for each call. The SDK retries them only after a 429 or a connection error before the send.
+
+The PHP, Python and Ruby SDKs use the same retry rules.
 
 If the server deleted a tag but the response did not arrive, the retry of `tags.delete()` gets a `NotFoundError`.
 
@@ -465,16 +484,20 @@ export async function POST(request: Request) {
 		throw error;
 	}
 
-	// Drop a delivery that you processed before.
-	if (await db.deliveries.exists(event.deliveryId)) {
+	// Drop a delivery that you processed before. Older instances send no ID.
+	const { deliveryId } = event;
+
+	if (deliveryId !== null && (await db.deliveries.exists(deliveryId))) {
 		return new Response(null, { status: 204 });
 	}
 
-	if (event.event === "post.completed") {
+	if (event.type === "post.completed") {
 		// Tell your team that the feature shipped.
 	}
 
-	await db.deliveries.add(event.deliveryId);
+	if (deliveryId !== null) {
+		await db.deliveries.add(deliveryId);
+	}
 
 	return new Response(null, { status: 204 });
 }
@@ -509,7 +532,7 @@ app.post(
 				headers: req.headers,
 				secret: process.env.FEEDBACKPILGRIM_WEBHOOK_SECRET!,
 			});
-			console.log(event.deliveryId, event.event, event.data.title);
+			console.log(event.deliveryId, event.type, event.data.title);
 			res.sendStatus(204);
 		} catch (error) {
 			if (error instanceof WebhookVerificationError) {
@@ -571,6 +594,10 @@ const pilgrim = new FeedbackPilgrim({
 The package ships ESM (`dist/index.js`) and CommonJS (`dist/index.cjs`), with types for both.
 
 Node.js 20 is out of support since April 2026. The SDK still tests on it.
+
+## License
+
+MIT. Read [LICENSE](LICENSE). The Feedback Pilgrim app has its own license.
 
 ## Contributing
 

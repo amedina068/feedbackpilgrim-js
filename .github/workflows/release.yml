@@ -2,9 +2,8 @@
 # starts it by hand. It does not run on a push or a tag.
 #
 # Before the first release:
-# 1. Choose a license, add the LICENSE file and set `license` in package.json.
-# 2. Add the repository secret NPM_TOKEN (an npm automation token).
-# 3. Start this workflow from the Actions tab. Leave "dry-run" on for a test.
+# 1. Add the repository secret NPM_TOKEN (an npm automation token).
+# 2. Start this workflow from the Actions tab. Leave "dry-run" on for a test.
 name: Release
 
 on:

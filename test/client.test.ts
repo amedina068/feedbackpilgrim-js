@@ -147,39 +147,31 @@ describe("requests", () => {
 	});
 });
 
-describe("init", () => {
+describe("signInUrl()", () => {
 	it("sends the contact and returns the sign-in link", async () => {
 		const authUrl = "https://acme.feedback.test/authenticate/550e8400";
 		const fetch = mockFetch(json(200, { auth_url: authUrl }));
 
-		const result = await client(fetch).init({
+		const result = await client(fetch).signInUrl({
 			email: "jane@example.com",
 			name: "Jane Doe",
-			plan: "premium",
+			customFields: { plan: "premium", email: "other@example.com" },
 		});
 
 		const call = callOf(fetch);
 		expect(call.method).toBe("POST");
 		expect(call.url.pathname).toBe("/api/public/v1/init");
 		expect(call.body).toEqual({
-			contact: { email: "jane@example.com", name: "Jane Doe", plan: "premium" },
+			contact: { plan: "premium", email: "jane@example.com", name: "Jane Doe" },
 		});
-		expect(result).toEqual({ auth_url: authUrl });
+		expect(result).toBe(authUrl);
 	});
 
-	it("returns an empty object when the app sends an empty array", async () => {
+	it("returns null when the app sends an empty array", async () => {
 		const fetch = mockFetch(json(200, []));
 
-		expect(await client(fetch).init({ email: "" })).toEqual({});
-	});
-
-	it("does not retry a 5xx, because init writes the contact", async () => {
-		const fetch = mockFetch(json(500, {}));
-
-		await expect(
-			client(fetch).init({ email: "jane@example.com" }),
-		).rejects.toMatchObject({ code: "server_error" });
-		expect(fetch).toHaveBeenCalledOnce();
+		expect(await client(fetch).signInUrl({ email: "" })).toBeNull();
+		expect(callOf(fetch).body).toEqual({ contact: { email: "" } });
 	});
 });
 

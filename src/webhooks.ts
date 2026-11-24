@@ -77,17 +77,20 @@ export interface WebhookPost {
 
 /** A verified webhook delivery. */
 export interface WebhookEvent {
+	/** The `event` field of the signed body. Keep a `default` branch for new types. */
+	type: WebhookEventType | (string & {});
+	/** The post: the `data` field of the signed body. */
+	data: WebhookPost;
+	/** The decoded body. */
+	payload: { event: string; data: WebhookPost };
+	/** The Unix time of this attempt, in seconds. */
+	timestamp: number;
 	/**
 	 * The `X-FeedbackPilgrim-Delivery` UUID. Each retry of a delivery has the
 	 * same ID. Store it, and drop a delivery with an ID that you processed.
+	 * It is `null` when the header is missing: older instances do not send it.
 	 */
-	deliveryId: string;
-	/** The Unix time of this attempt, in seconds. */
-	timestamp: number;
-	/** The `event` field of the signed body. Keep a `default` branch for new types. */
-	event: WebhookEventType | (string & {});
-	/** The post. */
-	data: WebhookPost;
+	deliveryId: string | null;
 }
 
 const DEFAULT_TOLERANCE = 300;
@@ -112,8 +115,8 @@ export async function verifyWebhookSignature(
 
 /**
  * Verifies a webhook delivery and returns its event and its delivery ID.
- * Throws a `WebhookVerificationError` when a header is missing, the signature
- * does not match, or the timestamp is outside the tolerance.
+ * Throws a `WebhookVerificationError` with the reason `timestamp`,
+ * `signature` or `payload` when the delivery is not valid.
  *
  * @example
  * const event = await verifyWebhook({
@@ -126,7 +129,6 @@ export async function verifyWebhook(
 	options: VerifyWebhookOptions,
 ): Promise<WebhookEvent> {
 	const { body, headers } = options;
-	const deliveryId = header(headers, WEBHOOK_HEADERS.delivery);
 	const timestamp = header(headers, WEBHOOK_HEADERS.timestamp);
 	const failure = await failureOf({
 		...options,
@@ -138,31 +140,45 @@ export async function verifyWebhook(
 		throw new WebhookVerificationError(failure, MESSAGES[failure]);
 	}
 
-	if (deliveryId === undefined || deliveryId === "") {
-		throw new WebhookVerificationError("delivery", MESSAGES.delivery);
-	}
-
 	// Read the type from the signed body. The event header is not signed.
-	const payload = JSON.parse(new TextDecoder().decode(bytesOf(body))) as {
-		event: string;
-		data: WebhookPost;
-	};
+	const payload = parsePayload(body);
 
 	return {
-		deliveryId,
-		timestamp: Number(timestamp),
-		event: payload.event,
+		type: payload.event,
 		data: payload.data,
+		payload,
+		timestamp: Number(timestamp?.trim()),
+		deliveryId: header(headers, WEBHOOK_HEADERS.delivery)?.trim() || null,
 	};
 }
 
 const MESSAGES: Record<WebhookFailureReason, string> = {
-	signature:
-		"The X-FeedbackPilgrim-Signature-V2 header is missing or does not match. Check the secret and use the raw body.",
 	timestamp:
 		"The X-FeedbackPilgrim-Timestamp header is missing, is not a number, or is outside the tolerance.",
-	delivery: "The X-FeedbackPilgrim-Delivery header is missing.",
+	signature:
+		"The X-FeedbackPilgrim-Signature-V2 header is missing or does not match. Check the secret and use the raw body.",
+	payload: "The webhook body is not a JSON object.",
 };
+
+function parsePayload(body: WebhookBody): WebhookEvent["payload"] {
+	let payload: unknown;
+
+	try {
+		payload = JSON.parse(new TextDecoder().decode(bytesOf(body)));
+	} catch {
+		payload = undefined;
+	}
+
+	if (
+		typeof payload !== "object" ||
+		payload === null ||
+		Array.isArray(payload)
+	) {
+		throw new WebhookVerificationError("payload", MESSAGES.payload);
+	}
+
+	return payload as WebhookEvent["payload"];
+}
 
 async function failureOf(
 	options: VerifyWebhookSignatureOptions,
@@ -179,7 +195,7 @@ async function failureOf(
 
 	const timestamp = options.timestamp?.trim();
 
-	if (timestamp === undefined || !/^\d+$/.test(timestamp)) {
+	if (timestamp === undefined || !/^[0-9]+$/.test(timestamp)) {
 		return "timestamp";
 	}
 

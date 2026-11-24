@@ -18,6 +18,8 @@ import {
 	client,
 	connectionRefused,
 	connectionReset,
+	connectTimeout,
+	dnsFailure,
 	html,
 	json,
 	mockFetch,
@@ -163,24 +165,36 @@ describe("RateLimitError", () => {
 });
 
 describe("ConnectionError", () => {
-	it("wraps a refused connection and marks it as before send", async () => {
+	it("wraps a refused connection and marks it as before the send", async () => {
 		const error = await errorOf(connectionRefused());
 
 		expect(error).toBeInstanceOf(ConnectionError);
-		expect(error).toMatchObject({
-			code: "connection_error",
-			beforeSend: true,
-		});
+		expect(error).toMatchObject({ code: "connection_error", beforeSend: true });
 		expect((error as ConnectionError).cause).toBeInstanceOf(TypeError);
 	});
 
-	it("wraps a reset connection and does not mark it as before send", async () => {
+	it("marks a DNS failure and a connect timeout as before the send", async () => {
+		expect(await errorOf(dnsFailure())).toMatchObject({ beforeSend: true });
+		expect(await errorOf(connectTimeout())).toMatchObject({ beforeSend: true });
+	});
+
+	it("does not mark a reset connection as before the send", async () => {
 		const error = await errorOf(connectionReset());
 
 		expect(error).toMatchObject({
 			code: "connection_error",
 			beforeSend: false,
 		});
+	});
+
+	it("does not mark an unreachable host as before the send", async () => {
+		const unreachable = new TypeError("fetch failed", {
+			cause: Object.assign(new Error("connect EHOSTUNREACH"), {
+				code: "EHOSTUNREACH",
+			}),
+		});
+
+		expect(await errorOf(unreachable)).toMatchObject({ beforeSend: false });
 	});
 });
 

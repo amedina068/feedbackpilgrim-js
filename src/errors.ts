@@ -110,8 +110,8 @@ export class ConnectionError extends FeedbackPilgrimError {
 	readonly code = "connection_error" as const;
 	override name = "ConnectionError";
 	/**
-	 * `true` when the SDK knows that the server did not receive the request,
-	 * for example when the connection was refused. Then a retry is safe.
+	 * `true` for a DNS failure, a refused connection or a connect timeout. Then
+	 * the server did not get the request, and a retry is safe for each call.
 	 */
 	readonly beforeSend: boolean;
 
@@ -128,7 +128,7 @@ export class TimeoutError extends FeedbackPilgrimError {
 }
 
 /** The part of a webhook delivery that failed the check. */
-export type WebhookFailureReason = "signature" | "timestamp" | "delivery";
+export type WebhookFailureReason = "signature" | "timestamp" | "payload";
 
 /**
  * `verifyWebhook()` refused a delivery. Answer with a 400 status and do not
@@ -138,9 +138,9 @@ export class WebhookVerificationError extends FeedbackPilgrimError {
 	readonly code = "webhook_verification_error" as const;
 	override name = "WebhookVerificationError";
 	/**
+	 * `timestamp`: the timestamp header is missing, is not digits, or is outside the tolerance.
 	 * `signature`: the signature header is missing or does not match the body.
-	 * `timestamp`: the timestamp header is missing or outside the tolerance.
-	 * `delivery`: the delivery header is missing.
+	 * `payload`: the signature is valid, but the body is not a JSON object.
 	 */
 	readonly reason: WebhookFailureReason;
 
@@ -196,17 +196,14 @@ export function parseRetryAfter(
 	return Number.isNaN(date) ? undefined : Math.max(0, (date - now) / 1000);
 }
 
-// The codes that a runtime gives when the connection never opened. Node
-// (undici) puts them on `cause.code`. Bun puts them on `code`.
+// The codes of a DNS failure, a refused connection and a connect timeout.
+// Node (undici) puts them on `cause.code`. Bun puts them on `code`.
 const BEFORE_SEND_CODES = new Set([
-	"ECONNREFUSED",
 	"ENOTFOUND",
 	"EAI_AGAIN",
-	"EHOSTUNREACH",
-	"ENETUNREACH",
-	"UND_ERR_CONNECT_TIMEOUT",
+	"ECONNREFUSED",
 	"ConnectionRefused",
-	"FailedToOpenSocket",
+	"UND_ERR_CONNECT_TIMEOUT",
 ]);
 
 function isBeforeSend(error: unknown): boolean {

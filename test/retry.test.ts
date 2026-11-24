@@ -13,6 +13,8 @@ import {
 	client,
 	connectionRefused,
 	connectionReset,
+	connectTimeout,
+	dnsFailure,
 	json,
 	mockFetch,
 } from "./helpers";
@@ -188,11 +190,39 @@ describe("retries of a request that is not idempotent", () => {
 		expect(fetch).toHaveBeenCalledTimes(1);
 	});
 
-	it("retries a refused connection, because the server did not get the request", async () => {
-		const fetch = mockFetch(connectionRefused(), json(201, POST));
+	it.each([
+		["a DNS failure", dnsFailure],
+		["a refused connection", connectionRefused],
+		["a connect timeout", connectTimeout],
+	])(
+		"retries %s, because the server did not get the request",
+		async (_name, failure) => {
+			const fetch = mockFetch(failure(), json(201, POST));
 
-		expect(await settle(client(fetch).posts.create(params))).toEqual(POST);
+			expect(await settle(client(fetch).posts.create(params))).toEqual(POST);
+			expect(fetch).toHaveBeenCalledTimes(2);
+		},
+	);
+
+	it("retries signInUrl() after a refused connection", async () => {
+		const fetch = mockFetch(
+			connectionRefused(),
+			json(200, { auth_url: "https://a.test/x" }),
+		);
+
+		expect(
+			await settle(client(fetch).signInUrl({ email: "jane@example.com" })),
+		).toBe("https://a.test/x");
 		expect(fetch).toHaveBeenCalledTimes(2);
+	});
+
+	it("does not retry signInUrl(), because each call makes a new link", async () => {
+		const fetch = mockFetch(json(500, {}));
+
+		expect(
+			await settle(client(fetch).signInUrl({ email: "jane@example.com" })),
+		).toBeInstanceOf(ServerError);
+		expect(fetch).toHaveBeenCalledTimes(1);
 	});
 
 	it("retries a 429, because the server did not run the request", async () => {
@@ -237,6 +267,21 @@ describe("Retry-After", () => {
 	it("reads Retry-After on a 503", async () => {
 		const fetch = mockFetch(
 			json(503, {}, { "retry-after": "2" }),
+			json(200, POST),
+		);
+		const promise = client(fetch).posts.get(1);
+
+		await vi.advanceTimersByTimeAsync(1999);
+		expect(fetch).toHaveBeenCalledTimes(1);
+
+		await vi.advanceTimersByTimeAsync(1);
+		expect(await promise).toEqual(POST);
+	});
+
+	it("reads an HTTP date in Retry-After on a 503", async () => {
+		vi.setSystemTime(new Date("2026-11-18T10:59:58Z"));
+		const fetch = mockFetch(
+			json(503, {}, { "retry-after": "Wed, 18 Nov 2026 11:00:00 GMT" }),
 			json(200, POST),
 		);
 		const promise = client(fetch).posts.get(1);

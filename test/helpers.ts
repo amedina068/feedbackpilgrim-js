@@ -48,6 +48,24 @@ export function connectionRefused(): TypeError {
 	});
 }
 
+/** A `fetch` error like the one undici throws when the host name does not resolve. */
+export function dnsFailure(): TypeError {
+	return new TypeError("fetch failed", {
+		cause: Object.assign(new Error("getaddrinfo ENOTFOUND feedback.test"), {
+			code: "ENOTFOUND",
+		}),
+	});
+}
+
+/** A `fetch` error like the one undici throws when the connection does not open in time. */
+export function connectTimeout(): TypeError {
+	return new TypeError("fetch failed", {
+		cause: Object.assign(new Error("Connect Timeout Error"), {
+			code: "UND_ERR_CONNECT_TIMEOUT",
+		}),
+	});
+}
+
 /** A `fetch` error like the one undici throws when the server resets the connection. */
 export function connectionReset(): TypeError {
 	return new TypeError("fetch failed", {

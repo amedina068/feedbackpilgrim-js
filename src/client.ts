@@ -26,11 +26,9 @@ export interface FeedbackPilgrimOptions {
 	fetch?: FetchLike;
 }
 
-/**
- * The signed-in user of your app. `email` finds or creates the contact. Each
- * field that is not named here is a custom field of the contact.
- */
-export type InitContact = {
+/** The parameters of `signInUrl()`. */
+export interface SignInUrlParams {
+	/** The email of the signed-in user of your app. It finds or creates the contact. */
 	email: string;
 	name?: string;
 	/** Monthly recurring revenue. */
@@ -39,16 +37,8 @@ export type InitContact = {
 	ltv?: number;
 	/** The URL of an image. */
 	avatar?: string;
-	[customField: string]: unknown;
-};
-
-/** The result of `init()`. */
-export interface InitResult {
-	/**
-	 * The sign-in link for the public site, valid for 24 hours. Send it only to
-	 * that contact. It is missing when the contact has no email.
-	 */
-	auth_url?: string;
+	/** Custom fields of the contact. For a contact that exists, they replace the custom fields. */
+	customFields?: Record<string, unknown>;
 }
 
 const DEFAULT_TIMEOUT = 30_000;
@@ -101,20 +91,33 @@ export class FeedbackPilgrim {
 
 	/**
 	 * Creates or updates the contact with this email and returns a sign-in link
-	 * for the public site. `POST /api/public/v1/init`.
+	 * for the public site. The link is valid for 24 hours. Send it only to that
+	 * contact. `POST /api/public/v1/init`.
+	 *
+	 * Returns `null` when the app sends no link, for example for an empty email.
 	 */
-	async init(
-		contact: InitContact,
+	async signInUrl(
+		params: SignInUrlParams,
 		options: RequestOptions = {},
-	): Promise<InitResult> {
-		const body = await this.#transport.request<InitResult | []>(
+	): Promise<string | null> {
+		const { customFields, ...known } = params;
+		const contact = { ...customFields, ...definedFields(known) };
+		const body = await this.#transport.request<{ auth_url?: unknown } | []>(
 			{ method: "POST", path: "/api/public/v1/init", json: { contact } },
 			options,
 		);
 
-		// The app sends `[]`, not `{}`, when the request has no contact email.
-		return Array.isArray(body) ? {} : body;
+		// The app sends `[]`, not an object, when the request has no contact email.
+		return !Array.isArray(body) && typeof body?.auth_url === "string"
+			? body.auth_url
+			: null;
 	}
+}
+
+function definedFields(fields: object): Record<string, unknown> {
+	return Object.fromEntries(
+		Object.entries(fields).filter(([, value]) => value !== undefined),
+	);
 }
 
 function positive(name: string, value: number, allowZero = false): number {

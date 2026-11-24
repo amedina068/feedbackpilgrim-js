@@ -11,6 +11,9 @@ import vectors from "./fixtures/webhook-signature-vectors.json" with {
 import legacy from "./fixtures/webhook-signature-vectors-legacy.json" with {
 	type: "json",
 };
+import shared from "./fixtures/webhook-verify-vectors.json" with {
+	type: "json",
+};
 
 const DELIVERY_ID = "0b8f2c4e-6a1d-4e3b-9c7f-1a2b3c4d5e6f";
 const VALID = vectors.cases.find((item) => item.valid);
@@ -76,10 +79,11 @@ describe("signature vectors", () => {
 			if (item.valid) {
 				const parsed = JSON.parse(item.body);
 				expect(await verify).toEqual({
-					deliveryId: DELIVERY_ID,
-					timestamp: Number(item.timestamp),
-					event: item.event,
+					type: item.event,
 					data: parsed.data,
+					payload: parsed,
+					timestamp: Number(item.timestamp),
+					deliveryId: DELIVERY_ID,
 				});
 				return;
 			}
@@ -101,6 +105,31 @@ describe("signature vectors", () => {
 			).toBe(false);
 		}
 	});
+});
+
+describe("shared verify vectors", () => {
+	for (const item of shared.cases) {
+		it(item.name, async () => {
+			const verify = verifyWebhook({
+				body: item.body,
+				headers: item.headers,
+				secret: shared.secret,
+				now: new Date(item.now * 1000),
+			});
+
+			if (item.expect.valid) {
+				const event = await verify;
+				expect(event.type).toBe(item.expect.type);
+				expect(event.timestamp).toBe(item.expect.timestamp);
+				expect(event.deliveryId).toBe(item.expect.delivery_id);
+				expect(event.data.id).toBe(item.expect.data_id);
+				expect(event.payload).toEqual(JSON.parse(item.body));
+				return;
+			}
+
+			expect((await failure(verify)).reason).toBe(item.expect.reason);
+		});
+	}
 });
 
 describe("verifyWebhookSignature()", () => {
@@ -220,7 +249,7 @@ describe("verifyWebhook()", () => {
 		const event = await verifyWebhook(valid);
 
 		expect(event.deliveryId).toBe(DELIVERY_ID);
-		expect(event.event).toBe("post.created");
+		expect(event.type).toBe("post.created");
 		expect(event.data).toMatchObject({ id: 42, title: "Add dark mode" });
 	});
 
@@ -256,7 +285,7 @@ describe("verifyWebhook()", () => {
 			},
 		});
 
-		expect(event.event).toBe("post.created");
+		expect(event.type).toBe("post.created");
 	});
 
 	it("throws reason timestamp for an old delivery", async () => {
@@ -295,11 +324,9 @@ describe("verifyWebhook()", () => {
 		);
 	});
 
-	it("throws reason delivery when the delivery header is missing", async () => {
+	it("gives a null delivery ID when the delivery header is missing", async () => {
 		const { "X-FeedbackPilgrim-Delivery": _, ...headers } = headersOf(VALID);
 
-		expect((await failure(verifyWebhook({ ...valid, headers }))).reason).toBe(
-			"delivery",
-		);
+		expect((await verifyWebhook({ ...valid, headers })).deliveryId).toBeNull();
 	});
 });

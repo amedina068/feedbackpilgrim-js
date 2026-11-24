@@ -1,8 +1,10 @@
 import {
+	ApiError,
 	ConnectionError,
 	createApiError,
 	type FeedbackPilgrimError,
 	FeedbackPilgrimError as FeedbackPilgrimErrorClass,
+	parseRetryAfter,
 	RateLimitError,
 	ServerError,
 	TimeoutError,
@@ -193,8 +195,9 @@ export class Transport {
 
 /**
  * Returns the delay before the next attempt, or `undefined` when the SDK must
- * not retry. A request that is not idempotent gets a retry only when the
- * server did not process it: a 429, or a connection that never opened.
+ * not retry. A 429 and a connection error before the send get a retry for each
+ * request, because the server did not do the request. A 5xx, another
+ * connection error and a timeout get a retry only for an idempotent request.
  */
 export function retryDelay(
 	failure: FeedbackPilgrimError,
@@ -204,43 +207,31 @@ export function retryDelay(
 ): number | undefined {
 	const retryable =
 		failure instanceof RateLimitError ||
-		(failure instanceof ConnectionError &&
-			(idempotent || failure.beforeSend)) ||
+		(failure instanceof ConnectionError && failure.beforeSend) ||
 		(idempotent &&
-			(failure instanceof ServerError || failure instanceof TimeoutError));
+			(failure instanceof ServerError ||
+				failure instanceof ConnectionError ||
+				failure instanceof TimeoutError));
 
 	if (!retryable) {
 		return undefined;
 	}
 
-	const retryAfter = retryAfterOf(failure);
+	const retryAfter =
+		failure instanceof ApiError
+			? parseRetryAfter(failure.headers.get("retry-after"))
+			: undefined;
 
 	if (retryAfter !== undefined) {
-		return retryAfter <= MAX_RETRY_AFTER ? retryAfter : undefined;
+		const delay = Math.ceil(retryAfter * 1000);
+
+		return delay <= MAX_RETRY_AFTER ? delay : undefined;
 	}
 
 	const base = Math.min(MAX_RETRY_DELAY, INITIAL_RETRY_DELAY * 2 ** attempt);
 
 	// Equal jitter: half of the delay is fixed, the other half is random.
 	return base / 2 + random() * (base / 2);
-}
-
-function retryAfterOf(failure: FeedbackPilgrimError): number | undefined {
-	if (failure instanceof RateLimitError) {
-		return failure.retryAfter === undefined
-			? undefined
-			: Math.ceil(failure.retryAfter * 1000);
-	}
-
-	if (failure instanceof ServerError) {
-		const header = failure.headers.get("retry-after")?.trim();
-
-		return header !== undefined && /^\d+$/.test(header)
-			? Number(header) * 1000
-			: undefined;
-	}
-
-	return undefined;
 }
 
 /** Waits `ms` milliseconds. An abort of `signal` rejects with the reason of the signal. */

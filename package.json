@@ -11,6 +11,7 @@
 		"webhooks",
 		"sdk"
 	],
+	"license": "MIT",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/amedina068/feedbackpilgrim-js.git"
@@ -51,6 +52,7 @@
 		"smoke:node": "node smoke/esm.mjs && node smoke/cjs.cjs",
 		"smoke:bun": "bun smoke/esm.mjs",
 		"smoke:deno": "deno run --allow-read smoke/esm.mjs",
+		"prepare": "tsdown",
 		"prepublishOnly": "npm run build && npm run check:package"
 	},
 	"devDependencies": {

@@ -1,8 +1,7 @@
 export {
 	FeedbackPilgrim,
 	type FeedbackPilgrimOptions,
-	type InitContact,
-	type InitResult,
+	type SignInUrlParams,
 } from "./client";
 export type { FetchLike, RequestOptions } from "./core/transport";
 export {
