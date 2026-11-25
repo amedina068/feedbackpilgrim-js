@@ -3,7 +3,7 @@
 [![CI](https://github.com/amedina068/feedbackpilgrim-js/actions/workflows/ci.yml/badge.svg)](https://github.com/amedina068/feedbackpilgrim-js/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-The TypeScript client for a self-hosted Feedback Pilgrim instance. Feedback Pilgrim keeps the posts, release notes, contacts, testimonials and tags of your product.
+The TypeScript client for Feedback Pilgrim Cloud and for a self-hosted Feedback Pilgrim instance. Feedback Pilgrim keeps the posts, release notes, contacts, testimonials and tags of your product.
 
 One package runs on Node.js, Bun, Deno, Cloudflare Workers and other edge runtimes. The package has no runtime dependencies. It uses the global `fetch` and Web Crypto. It sends no telemetry.
 
@@ -41,11 +41,15 @@ For Bun, use `bun add github:amedina068/feedbackpilgrim-js`.
 
 ## Quick start
 
+No instance yet? Start a free 14-day trial of [Feedback Pilgrim Cloud](https://app.feedbackpilgrim.com/register). No credit card is necessary.
+
+On Feedback Pilgrim Cloud, the base URL is `https://app.feedbackpilgrim.com`:
+
 ```ts
 import { FeedbackPilgrim } from "feedbackpilgrim";
 
 const pilgrim = new FeedbackPilgrim({
-	baseUrl: "https://feedback.example.com",
+	baseUrl: "https://app.feedbackpilgrim.com",
 	token: process.env.FEEDBACKPILGRIM_TOKEN,
 });
 
@@ -59,15 +63,24 @@ for await (const pending of pilgrim.posts.list({ status: "pending" })) {
 }
 ```
 
+On a self-hosted instance, the base URL is the `APP_URL` of your instance:
+
+```ts
+const pilgrim = new FeedbackPilgrim({
+	baseUrl: "https://feedback.example.com",
+	token: process.env.FEEDBACKPILGRIM_TOKEN,
+});
+```
+
 ## Configuration
 
-| Option       | Type                               | Default        | Description                                                                                               |
-| ------------ | ---------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------- |
-| `baseUrl`    | `string \| URL`                    | (required)     | The root URL of your instance (its `APP_URL`). Each user runs their own instance, so there is no default. |
-| `token`      | `string`                           | (required)     | An API token from **Settings → API Tokens**. The SDK sends it as `Authorization: Bearer`.                 |
-| `timeout`    | `number`                           | `30000`        | The time limit for one attempt, in milliseconds.                                                          |
-| `maxRetries` | `number`                           | `2`            | The maximum number of retries after the first attempt. Use `0` to stop retries.                           |
-| `fetch`      | `(url, init) => Promise<Response>` | global `fetch` | A `fetch` function for tests or a proxy.                                                                  |
+| Option       | Type                               | Default        | Description                                                                                          |
+| ------------ | ---------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------- |
+| `baseUrl`    | `string \| URL`                    | (required)     | The `APP_URL` of the instance. On Cloud, use `https://app.feedbackpilgrim.com`. There is no default. |
+| `token`      | `string`                           | (required)     | An API token from **Settings → API Tokens**. The SDK sends it as `Authorization: Bearer`.            |
+| `timeout`    | `number`                           | `30000`        | The time limit for one attempt, in milliseconds.                                                     |
+| `maxRetries` | `number`                           | `2`            | The maximum number of retries after the first attempt. Use `0` to stop retries.                      |
+| `fetch`      | `(url, init) => Promise<Response>` | global `fetch` | A `fetch` function for tests or a proxy.                                                             |
 
 Each method also accepts `{ signal, timeout, maxRetries }` as its last argument. These values replace the client values for that call.
 
@@ -602,7 +615,7 @@ Node.js 20 is out of support since April 2026. The SDK still tests on it.
 
 ## Related projects
 
-- [Feedback Pilgrim](https://github.com/amedina068/feedbackpilgrim): the self-hosted app that this SDK calls. It uses the AGPL-3.0.
+- [Feedback Pilgrim](https://github.com/amedina068/feedbackpilgrim): the app that this SDK calls. The self-hosted edition uses the AGPL-3.0. [Feedback Pilgrim Cloud](https://app.feedbackpilgrim.com) is the hosted edition.
 - [Documentation](https://feedbackpilgrim.com/docs): the guides for the app and the SDKs. The source is in [feedbackpilgrim-docs](https://github.com/amedina068/feedbackpilgrim-docs).
 - [SDK overview](https://feedbackpilgrim.com/docs/sdks/overview): the install steps and the features of each SDK.
 - SDKs for other languages: [PHP](https://github.com/amedina068/feedbackpilgrim-php), [Python](https://github.com/amedina068/feedbackpilgrim-python), [Ruby](https://github.com/amedina068/feedbackpilgrim-ruby).
