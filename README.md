@@ -74,13 +74,13 @@ const pilgrim = new FeedbackPilgrim({
 
 ## Configuration
 
-| Option       | Type                               | Default        | Description                                                                                               |
-| ------------ | ---------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------- |
-| `baseUrl`    | `string \| URL`                    | (required)     | The `APP_URL` of the instance. On Cloud, use `https://app.feedbackpilgrim.com`. There is no default.      |
-| `token`      | `string`                           | (required)     | An API token from **Settings → API Tokens**. The SDK sends it as `Authorization: Bearer`.                 |
-| `timeout`    | `number`                           | `30000`        | The time limit for one attempt, in milliseconds.                                                          |
-| `maxRetries` | `number`                           | `2`            | The maximum number of retries after the first attempt. Use `0` to stop retries.                           |
-| `fetch`      | `(url, init) => Promise<Response>` | global `fetch` | A `fetch` function for tests or a proxy.                                                                  |
+| Option       | Type                               | Default        | Description                                                                                          |
+| ------------ | ---------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------- |
+| `baseUrl`    | `string \| URL`                    | (required)     | The `APP_URL` of the instance. On Cloud, use `https://app.feedbackpilgrim.com`. There is no default. |
+| `token`      | `string`                           | (required)     | An API token from **Settings → API Tokens**. The SDK sends it as `Authorization: Bearer`.            |
+| `timeout`    | `number`                           | `30000`        | The time limit for one attempt, in milliseconds.                                                     |
+| `maxRetries` | `number`                           | `2`            | The maximum number of retries after the first attempt. Use `0` to stop retries.                      |
+| `fetch`      | `(url, init) => Promise<Response>` | global `fetch` | A `fetch` function for tests or a proxy.                                                             |
 
 Each method also accepts `{ signal, timeout, maxRetries }` as its last argument. These values replace the client values for that call.
 
