@@ -12,6 +12,8 @@
 		"sdk"
 	],
 	"license": "MIT",
+	"author": "Alejandro Medina (https://amedina.me)",
+	"homepage": "https://feedbackpilgrim.com/docs/sdks/overview",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/amedina068/feedbackpilgrim-js.git"
