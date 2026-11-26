@@ -592,14 +592,14 @@ const pilgrim = new FeedbackPilgrim({
 
 | Runtime            | Version              | Test in CI                                            |
 | ------------------ | -------------------- | ----------------------------------------------------- |
-| Node.js            | 20, 22, 24 and later | Unit tests and smoke test                             |
+| Node.js            | 22.12 and later      | Unit tests and smoke test on Node.js 22 and 24        |
 | Bun                | 1.x                  | Smoke test                                            |
 | Deno               | 2.x                  | Smoke test                                            |
 | Cloudflare Workers | Current              | None. The SDK uses only Web APIs that Workers supply. |
 
 The package ships ESM (`dist/index.js`) and CommonJS (`dist/index.cjs`), with types for both.
 
-Node.js 20 is out of support since April 2026. The SDK still tests on it.
+The SDK requires Node.js 22.12 or later. Node.js 20 reached end of life in April 2026. The SDK does not support it.
 
 ## Related projects
 
